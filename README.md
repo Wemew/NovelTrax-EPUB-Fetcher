@@ -10,10 +10,15 @@ behind a NovelTrax release's **Source** link and downloads the final EPUB.
 2. If the page is a Cloudflare/Turnstile challenge, FlareSolverr
    (`request.get`) returns the cleared URL, cookies and User-Agent; Playwright
    rebuilds its context with those values.
-3. Playwright follows countdown pages, clicks visible `Get Link`/`Download`/
+3. Standalone Turnstile forms are handled explicitly: dismiss the consent
+   overlay, forward page cookies (including the shortener's link cookie) to
+   FlareSolverr, wait for a real `cf-turnstile-response` token, then submit the
+   form. A browser click is never treated as proof that the widget passed.
+4. Playwright follows countdown pages, clicks visible `Get Link`/`Download`/
    `Continue` controls, and captures the browser download (also handles a
    direct `*.epub` anchor).
-4. The file is returned with its original filename.
+5. The file is returned with its original filename. If no token/download is
+   produced, the service returns a clear 502 instead of waiting forever.
 
 A successfully solved URL is remembered, so a residual Turnstile iframe or
 "verify you are human" banner does not re-trigger the gate before the page's
@@ -68,7 +73,8 @@ button downloads into `downloads_dir` and records the release as
 | --- | --- | --- |
 | `EPUB_FETCHER_FLARESOLVERR_URL` | empty | FlareSolverr base URL; required for Cloudflare/Turnstile gates |
 | `EPUB_FETCHER_FLARESOLVERR_WAIT` | `2` | Seconds FlareSolverr waits after solving |
-| `EPUB_FETCHER_FLARESOLVERR_TABS` | unset | Tab count for a standalone Turnstile widget |
+| `EPUB_FETCHER_FLARESOLVERR_TABS` | unset | Tab count for a standalone Turnstile widget; required when the widget only passes via keyboard focus |
+| `EPUB_FETCHER_TURNSTILE_WAIT` | `30` | Seconds to wait for the page's Turnstile form to issue a token before the FlareSolverr fallback |
 | `EPUB_FETCHER_TIMEOUT` | `150` | Per-fetch browser deadline in seconds |
 | `EPUB_FETCHER_OUTPUT_DIR` | system temp | Temporary download directory; files are deleted after the response |
 
@@ -94,5 +100,7 @@ the internal Docker network or loopback only, never expose port 8010 publicly.
   and failures return the last flow steps in `X-Fetch-Steps`.
 - No CAPTCHA billing service is used: interactive captchas (not Turnstile) still
   block the flow by design.
+- A Turnstile widget can refuse to issue a token (expired/blocked shortener);
+  NovelTrax then records the release as `FAILED` with the returned error.
 - The file is fetched over the browser/HTTP client, so the fetcher must be able
   to reach the CDN host; it does not bypass DRM or paywalls.
