@@ -24,7 +24,7 @@ the challenge is confirmed gone; otherwise FlareSolverr still runs.
 
 ```bash
 docker build -t noveltrax-epub-fetcher .
-docker run --rm -p 8010:8010 \
+docker run --rm -p 127.0.0.1:8010:8010 \
   -e EPUB_FETCHER_FLARESOLVERR_URL=http://flaresolverr:8191 \
   noveltrax-epub-fetcher
 ```
@@ -40,10 +40,11 @@ epub-fetcher:
     EPUB_FETCHER_FLARESOLVERR_TABS: "1"
     # Post-solve wait so the challenged page can swap in its download controls.
     EPUB_FETCHER_FLARESOLVERR_WAIT: "2"
-  ports: ["8010:8010"]
+  expose: ["8010"]
 ```
 
 Keep it on an internal network in production; `8010` is unauthenticated.
+The `docker run` example above publishes only to loopback for local testing.
 
 Standalone CLI (same image):
 
