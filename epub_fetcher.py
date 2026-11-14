@@ -402,6 +402,12 @@ def _submit_turnstile_form(page, token: str = "") -> bool:
         return False
 
 
+def _wait_countdown_signature(text: str):
+    """Return a changing seconds countdown value (go.kecapku --ready page)."""
+    match = re.search(r"\b(\d{1,3})\s*(?:seconds?|secs?)\b", str(text or ""), re.IGNORECASE)
+    return int(match.group(1)) if match else None
+
+
 def _countdown_percent(text: str):
     """Return the shortener's scan percentage, or None on a normal page."""
     raw = str(text or "")
@@ -1039,6 +1045,7 @@ def fetch(
                     current_url,
                     tuple(labels),
                     countdown_pct,
+                    _wait_countdown_signature(body_text),
                     bool(href),
                     bool(challenge_markers),
                     delay_present,
