@@ -89,6 +89,7 @@ button downloads into `downloads_dir` and records the release as
 | `EPUB_FETCHER_TURNSTILE_WAIT` | `30` | Seconds to wait for the page's Turnstile form to issue a token before the FlareSolverr fallback |
 | `EPUB_FETCHER_HEADLESS` | `false` (Docker) | Run Chromium headful under Xvfb; Cloudflare's managed widget refuses to issue a token to headless Chromium |
 | `EPUB_FETCHER_MAX_CONCURRENCY` | `1` | FIFO concurrency gate; `1` serializes fetches, `2+` runs parallel browser instances |
+| `EPUB_FETCHER_LOG_LEVEL` | `INFO` | `INFO` logs lifecycle/form/token summaries; `DEBUG` adds per-loop page labels/body snippets |
 | `EPUB_FETCHER_TIMEOUT` | `150` | Per-fetch browser deadline in seconds |
 | `EPUB_FETCHER_OUTPUT_DIR` | system temp | Temporary download directory; files are deleted after the response |
 
