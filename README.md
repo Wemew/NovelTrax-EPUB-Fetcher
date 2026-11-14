@@ -21,10 +21,12 @@ behind a NovelTrax release's **Source** link and downloads the final EPUB.
    page. A browser click is never treated as proof that the widget passed.
    Docker runs Chromium headful under Xvfb because the managed Turnstile widget
    refuses to issue a token to headless Chromium.
-4. Playwright follows countdown pages, clicks visible `Get Link`/`Download`/
-   `Continue` controls, and captures the browser download (also handles a
-   direct `*.epub` anchor).
-5. The file is returned with its original filename. If no token/download is
+4. Playwright follows countdown pages, dismisses `Got it!`/consent overlays,
+   and prefers trusted file-host links (Google Drive, Dropbox, MediaFire,
+   pixeldrain, direct `*.epub`) over clicking ad-covered buttons.
+5. Multiple same-label `Get Link` links are tried in order. Fake downloads
+   (installers/HTML) are discarded; only `PK`/`%PDF` archives are returned.
+6. The file is returned with its original filename. If no token/download is
    produced, the service returns a clear 502 instead of waiting forever.
 
 A successfully solved URL is remembered, so a residual Turnstile iframe or
