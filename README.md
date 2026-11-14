@@ -15,8 +15,12 @@ behind a NovelTrax release's **Source** link and downloads the final EPUB.
    asking it to solve the widget. This is required because FlareSolverr applies
    request cookies only *after* its Turnstile routine; without the warm-up it
    would solve the cookie-less homepage and never see the form. Once a real
-   `cf-turnstile-response` token exists, the form is submitted explicitly. A
-   browser click is never treated as proof that the widget passed.
+   `cf-turnstile-response` token exists, the form is submitted from a zero-delay
+   `form.requestSubmit()`, not by clicking the ad-covered button. Ad popups
+   such as `downloadgood.com` are ignored; the main tab reaches the countdown
+   page. A browser click is never treated as proof that the widget passed.
+   Docker runs Chromium headful under Xvfb because the managed Turnstile widget
+   refuses to issue a token to headless Chromium.
 4. Playwright follows countdown pages, clicks visible `Get Link`/`Download`/
    `Continue` controls, and captures the browser download (also handles a
    direct `*.epub` anchor).
@@ -78,6 +82,7 @@ button downloads into `downloads_dir` and records the release as
 | `EPUB_FETCHER_FLARESOLVERR_WAIT` | `2` | Seconds FlareSolverr waits after solving |
 | `EPUB_FETCHER_FLARESOLVERR_TABS` | unset | Tab count for a standalone Turnstile widget; required when the widget only passes via keyboard focus |
 | `EPUB_FETCHER_TURNSTILE_WAIT` | `30` | Seconds to wait for the page's Turnstile form to issue a token before the FlareSolverr fallback |
+| `EPUB_FETCHER_HEADLESS` | `false` (Docker) | Run Chromium headful under Xvfb; Cloudflare's managed widget refuses to issue a token to headless Chromium |
 | `EPUB_FETCHER_TIMEOUT` | `150` | Per-fetch browser deadline in seconds |
 | `EPUB_FETCHER_OUTPUT_DIR` | system temp | Temporary download directory; files are deleted after the response |
 
