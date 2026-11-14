@@ -21,12 +21,15 @@ behind a NovelTrax release's **Source** link and downloads the final EPUB.
    page. A browser click is never treated as proof that the widget passed.
    Docker runs Chromium headful under Xvfb because the managed Turnstile widget
    refuses to issue a token to headless Chromium.
-4. Playwright follows countdown pages, dismisses `Got it!`/consent overlays,
+4. Requests pass through a FIFO concurrency gate (default one browser).
+   NovelTrax also rejects a duplicate fetch for the same release while one is
+   queued/running.
+5. Playwright follows countdown pages, dismisses `Got it!`/consent overlays,
    and prefers trusted file-host links (Google Drive, Dropbox, MediaFire,
    pixeldrain, direct `*.epub`) over clicking ad-covered buttons.
-5. Multiple same-label `Get Link` links are tried in order. Fake downloads
+6. Multiple same-label `Get Link` links are tried in order. Fake downloads
    (installers/HTML) are discarded; only `PK`/`%PDF` archives are returned.
-6. The file is returned with its original filename. If no token/download is
+7. The file is returned with its original filename. If no token/download is
    produced, the service returns a clear 502 instead of waiting forever.
 
 A successfully solved URL is remembered, so a residual Turnstile iframe or
@@ -85,6 +88,7 @@ button downloads into `downloads_dir` and records the release as
 | `EPUB_FETCHER_FLARESOLVERR_TABS` | unset | Tab count for a standalone Turnstile widget; required when the widget only passes via keyboard focus |
 | `EPUB_FETCHER_TURNSTILE_WAIT` | `30` | Seconds to wait for the page's Turnstile form to issue a token before the FlareSolverr fallback |
 | `EPUB_FETCHER_HEADLESS` | `false` (Docker) | Run Chromium headful under Xvfb; Cloudflare's managed widget refuses to issue a token to headless Chromium |
+| `EPUB_FETCHER_MAX_CONCURRENCY` | `1` | FIFO concurrency gate; `1` serializes fetches, `2+` runs parallel browser instances |
 | `EPUB_FETCHER_TIMEOUT` | `150` | Per-fetch browser deadline in seconds |
 | `EPUB_FETCHER_OUTPUT_DIR` | system temp | Temporary download directory; files are deleted after the response |
 
