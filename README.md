@@ -1,46 +1,37 @@
-# NovelTrax EPUB fetcher
+# EPUB fetcher
 
-Standalone Playwright + FlareSolverr sidecar that resolves the link-hider chain
-behind a NovelTrax release's **Source** link and downloads the final EPUB.
+Resolves the link-hider chain behind a release's **Source** link and downloads
+the final EPUB. NovelTrax calls it over HTTP; it can also be used standalone.
 
 ## Chain
 
-1. `POST /fetch` with the source URL (shortener such as `vplink.cc`, then
-   `zshort.link`/`charexempire`/Turnstile gate).
+1. `POST /fetch` with the source URL (a shortener such as `vplink.cc`, then
+   `zshort.link`/`charexempire`/turnstile gate).
 2. If the page is a Cloudflare/Turnstile challenge, FlareSolverr
-   (`request.get`) returns the cleared URL, cookies and User-Agent; Playwright
-   rebuilds its context with those values.
+   (`request.get`) returns the cleared URL and cookies; Playwright adopts them.
 3. Standalone Turnstile forms are handled explicitly: dismiss the consent
    overlay, then warm a FlareSolverr **session** with the page cookies before
    asking it to solve the widget. This is required because FlareSolverr applies
    request cookies only *after* its Turnstile routine; without the warm-up it
    would solve the cookie-less homepage and never see the form. Once a real
-   `cf-turnstile-response` token exists, the form is submitted from a zero-delay
-   `form.requestSubmit()`, not by clicking the ad-covered button. Ad popups
-   such as `downloadgood.com` are ignored; the main tab reaches the countdown
-   page. A browser click is never treated as proof that the widget passed.
-   Docker runs Chromium headful under Xvfb because the managed Turnstile widget
-   refuses to issue a token to headless Chromium.
-4. Requests pass through a FIFO concurrency gate (default one browser).
-   NovelTrax also rejects a duplicate fetch for the same release while one is
-   queued/running.
-5. Playwright follows countdown pages, dismisses `Got it!`/consent overlays,
+   `cf-turnstile-response` token exists, the form is submitted explicitly. A
+   browser click is never treated as proof that the widget passed.
+4. Playwright follows countdown pages, dismisses `Got it!`/consent overlays,
    and prefers trusted file-host links (Google Drive, Dropbox, MediaFire,
    pixeldrain, direct `*.epub`) over clicking ad-covered buttons.
-6. Multiple same-label `Get Link` links are tried in order. Fake downloads
+5. Multiple same-label `Get Link` links are tried in order. Fake downloads
    (installers/HTML) are discarded; only `PK`/`%PDF` archives are returned.
-7. The file is returned with its original filename. If no token/download is
+6. The file is returned with its original filename. If no token/download is
    produced, the service returns a clear 502 instead of waiting forever.
 
-A successfully solved URL is remembered, so a residual Turnstile iframe or
-"verify you are human" banner does not re-trigger the gate before the page's
-download controls are clicked. A manual checkbox click is only trusted after
-the challenge is confirmed gone; otherwise FlareSolverr still runs.
+Ads/popups are ignored: only the tab that emits a download is used, and each
+clicks is bounded by a timeout so a non-navigating button cannot stall the
+loop.
 
 ## Run
 
 ```bash
-docker build -t noveltrax-epub-fetcher .
+docker build -t noveltrax-epub-fetcher tools/epub_fetcher
 docker run --rm -p 127.0.0.1:8010:8010 \
   -e EPUB_FETCHER_FLARESOLVERR_URL=http://flaresolverr:8191 \
   noveltrax-epub-fetcher
@@ -50,18 +41,36 @@ docker run --rm -p 127.0.0.1:8010:8010 \
 
 ```yaml
 epub-fetcher:
-  build: .
+  build: ./tools/epub_fetcher
   environment:
     EPUB_FETCHER_FLARESOLVERR_URL: http://flaresolverr:8191
-    # Optional: Tab count when a source's standalone Turnstile needs focus.
+    # Required for sites whose standalone Turnstile only passes via keyboard focus.
     EPUB_FETCHER_FLARESOLVERR_TABS: "1"
     # Post-solve wait so the challenged page can swap in its download controls.
     EPUB_FETCHER_FLARESOLVERR_WAIT: "2"
+    # Wait for the page's Turnstile form to issue a token before FlareSolverr.
+    EPUB_FETCHER_TURNSTILE_WAIT: "30"
+    # Abort a page with no controls/links/countdown after this many seconds.
+    EPUB_FETCHER_IDLE_TIMEOUT: "20"
+    # Docker runs Chromium headful under Xvfb; leave false.
+    EPUB_FETCHER_HEADLESS: "false"
+    # 1 = FIFO queue (recommended); 2+ launches parallel browser instances.
+    EPUB_FETCHER_MAX_CONCURRENCY: "1"
+    # INFO for lifecycle lines; DEBUG for per-loop page labels/body snippets.
+    EPUB_FETCHER_LOG_LEVEL: "INFO"
   expose: ["8010"]
 ```
 
-Keep it on an internal network in production; `8010` is unauthenticated.
-The `docker run` example above publishes only to loopback for local testing.
+Fetch requests are serialized through a FIFO gate by default (one Chromium
+instance). Set `EPUB_FETCHER_MAX_CONCURRENCY=2` only after checking container
+memory; NovelTrax also rejects a second fetch for the same release while one is
+queued/running.
+
+FlareSolverr is still required for Cloudflare/Turnstile; without it a challenge
+fails with a clear error instead of hanging. A solved URL is remembered, so a
+residual Turnstile iframe or "verify you are human" banner no longer re-triggers
+the gate before the page's Get Link/Continue controls are clicked. The context
+is rebuilt with FlareSolverr's User-Agent because `cf_clearance` is UA-bound.
 
 Standalone CLI (same image):
 
@@ -79,36 +88,12 @@ Set **Settings → Downloader → EPUB Fetcher URL** to `http://epub-fetcher:801
 button downloads into `downloads_dir` and records the release as
 `COMPLETED` (engine `http`) with the file path in `download_files_json`.
 
-## Environment
-
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `EPUB_FETCHER_FLARESOLVERR_URL` | empty | FlareSolverr base URL; required for Cloudflare/Turnstile gates |
-| `EPUB_FETCHER_FLARESOLVERR_WAIT` | `2` | Seconds FlareSolverr waits after solving |
-| `EPUB_FETCHER_FLARESOLVERR_TABS` | unset | Tab count for a standalone Turnstile widget; required when the widget only passes via keyboard focus |
-| `EPUB_FETCHER_TURNSTILE_WAIT` | `30` | Seconds to wait for the page's Turnstile form to issue a token before the FlareSolverr fallback |
-| `EPUB_FETCHER_HEADLESS` | `false` (Docker) | Run Chromium headful under Xvfb; Cloudflare's managed widget refuses to issue a token to headless Chromium |
-| `EPUB_FETCHER_MAX_CONCURRENCY` | `1` | FIFO concurrency gate; `1` serializes fetches, `2+` runs parallel browser instances |
-| `EPUB_FETCHER_LOG_LEVEL` | `INFO` | `INFO` logs lifecycle/form/token summaries; `DEBUG` adds per-loop page labels/body snippets |
-| `EPUB_FETCHER_TIMEOUT` | `150` | Per-fetch browser deadline in seconds |
-| `EPUB_FETCHER_OUTPUT_DIR` | system temp | Temporary download directory; files are deleted after the response |
-
-## Tests
-
-```bash
-python tests/test_epub_fetcher.py
-```
-
-The helper suite is hermetic (no browser/network). The browser flow is expected
-to be smoke-tested against a local challenge/countdown fixture in CI or before
-deploying.
-
 ## Security
 
 The service fetches whatever URL it is given and returns the bytes; bind it to
 the internal Docker network or loopback only, never expose port 8010 publicly.
 
-## Limits
+## Honest limits
 
 - Playwright drives a real Chromium; selector/label heuristics can break when a
   shortener changes its UI. `/health` reports whether the browser is available,
